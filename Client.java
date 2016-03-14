@@ -46,22 +46,26 @@ public class Client {
 					serverSocket.setSoTimeout(10000);
 					send();
 					serverSocket.close();
-				} catch (java.net.BindException e) {
-//					e.printStackTrace();
-					System.out.println("port not available, will try again");
 				} catch (java.io.InterruptedIOException e) {
 					System.out.println(
 							"Time Out 10 Sec. No Peer found, please enter the IP address of the peer you want to connect to. ");
 					peerName = input.readLine();
 					peerList.add(peerName);
+				} catch (Exception e){
+					System.out.println("Port not available, will try again");
 				}
 			} else {
-					receiverSocket = new Socket(peerList.remove(0), 6789);
-					hulk = new Peer(SHARED_FILE_PATH, receiverSocket);
-					hulk.sendIP();
-					receiverSocket.close();
-					receive();
-
+				String peerIP = peerList.remove(0);
+				try{
+				receiverSocket = new Socket(peerIP, 6789);
+				hulk = new Peer(SHARED_FILE_PATH, receiverSocket);
+				hulk.sendIP();
+				receiverSocket.close();
+				receive();
+				}catch(Exception e){
+					System.out.println("Could not connect to peer at " + peerIP + ", will try again ");
+					peerList.add(peerIP);
+				}
 			}
 
 		}

@@ -43,31 +43,35 @@ public class Server {
 				try {
 					serverSocket = new ServerSocket(6789);
 					serverSocket.setSoTimeout(10000);
-					send();
+					upload();
 					serverSocket.close();
-				} catch (java.net.BindException e) {
-//					e.printStackTrace();
-					System.out.println("port not available, will try again");
 				} catch (java.io.InterruptedIOException e) {
 					System.out.println(
 							"Time Out 10 Sec. No Peer found, please enter the IP address of the peer you want to connect to. ");
 					peerName = input.readLine();
 					peerList.add(peerName);
+				} catch (Exception e){
+					System.out.println("Port not available, will try again");
 				}
 			} else {
-				receiverSocket = new Socket(peerList.remove(0), 6789);
+				String peerIP = peerList.remove(0);
+				try{
+				receiverSocket = new Socket(peerIP, 6789);
 				hulk = new Peer(SHARED_FILE_PATH, receiverSocket);
 				hulk.sendIP();
 				receiverSocket.close();
-				receive();
-
+				download();
+				}catch(Exception e){
+					System.out.println("Could not connect to peer at " + peerIP + ", will try again ");
+					peerList.add(peerIP);
+				}
 			}
 
 		}
 
 	}
 
-	static void receive() throws UnknownHostException, IOException {
+	static void download() throws UnknownHostException, IOException {
 		receiverSocket = new Socket(IP_ADDRESS, 6789);
 		hulk = new Peer(SHARED_FILE_PATH, receiverSocket);
 
@@ -101,7 +105,7 @@ public class Server {
 		}
 	}
 
-	static void send() throws IOException {
+	static void upload() throws IOException {
 		System.out.println("Send - Server");
 		while (true) {
 
