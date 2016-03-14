@@ -7,7 +7,7 @@ import java.util.Stack;
 class Peer {
 
 	private String SHARED_FILE_PATH;
-
+	private int PEER_PORT = 6969;
 	private Socket mySocket;
 	private ServerSocket myServerSocket;
 	private String IP_ADDRESS;
@@ -18,22 +18,15 @@ class Peer {
 	private List<String> localPeerFiles = new ArrayList<String>(); 
 	private Stack<String> missingFiles = new Stack<String>(); 
 
-	Peer(String sharedFilePath, String IP) {
+	Peer(String sharedFilePath, String IP, int port) {
 		SHARED_FILE_PATH = sharedFilePath;
 		IP_ADDRESS = IP;
+		PEER_PORT = port;
 	}
 	
 	void init() throws IOException{
 		inFromPeer = new BufferedReader(new InputStreamReader(mySocket.getInputStream()));
 		outToPeer = new DataOutputStream(mySocket.getOutputStream());
-	}
-
-	BufferedReader getInputStream() {
-		return inFromPeer;
-	}
-
-	DataOutputStream getDataOutputStream() {
-		return outToPeer;
 	}
 	
 	void setServerSocket(ServerSocket ss){
@@ -41,25 +34,25 @@ class Peer {
 	}
 	
 	void download() throws Exception {
-		mySocket = new Socket(IP_ADDRESS, 6789);
+		mySocket = new Socket(IP_ADDRESS, PEER_PORT);
 		init();
 		System.out.println("Downloading");
-		String peerFiles = requestFileList();
+		String peerFiles = requestRemoteFileList();
 		mySocket.close();
 
 		remotePeerFiles = convertToList(peerFiles);
 		localPeerFiles = getMyFiles();
-		missingFiles = getMissingFiles(localPeerFiles, remotePeerFiles);
+		missingFiles = calculateMissingFiles(localPeerFiles, remotePeerFiles);
 
 		while (true) {
 			if (!missingFiles.isEmpty()) {
 				String fetchFile = missingFiles.pop();
-				mySocket = new Socket(IP_ADDRESS, 6789);
+				mySocket = new Socket(IP_ADDRESS, PEER_PORT);
 				init();
 				requestFile(fetchFile);
 				mySocket.close();
 			} else {
-				mySocket = new Socket(IP_ADDRESS, 6789);
+				mySocket = new Socket(IP_ADDRESS, PEER_PORT);
 				init();
 				terminateSync();
 				mySocket.close();
@@ -67,6 +60,49 @@ class Peer {
 			}
 		}
 	}
+	
+	String requestRemoteFileList() {
+		String fileList = "";
+		try {
+			outToPeer.writeBytes("L\n"); // no problem?
+			fileList = inFromPeer.readLine();
+			outToPeer.flush();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+
+		return fileList;
+	}
+	
+
+	void requestFile(String fileName) {
+		OutputStream out = null;
+		InputStream in = null;
+
+		try {
+			outToPeer.writeBytes("F" + fileName + "\n");
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		try {
+			out = new FileOutputStream(SHARED_FILE_PATH + fileName);
+		} catch (FileNotFoundException ex) {
+			System.out.println("File not found. ");
+		}
+		try {
+			in = mySocket.getInputStream();
+			byte[] bytes = new byte[100 * 1024];
+			int count;
+			while ((count = in.read(bytes)) > 0) {
+				out.write(bytes, 0, count);
+			}
+			outToPeer.flush();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+	}
+	
 	static List<String> convertToList(String filenames) {
 		List<String> list = new ArrayList<String>();
 		String fileNames[] = filenames.split(",");
@@ -87,22 +123,21 @@ class Peer {
 		return allFilesList;
 	}
 	
-	static Stack<String> getMissingFiles(List<String> myFilesList, List<String> peerFileList) {
+	static Stack<String> calculateMissingFiles(List<String> myFilesList, List<String> peerFileList) {
 		peerFileList.removeAll(myFilesList);
 		Stack<String> missingFiles = new Stack<String>();
 		for (int i = 0; i < peerFileList.size(); i++) {
-			System.out.println(peerFileList.get(i));
 			missingFiles.push(peerFileList.get(i));
 		}
 		return missingFiles;
 	}
 	
 	void upload() throws IOException {
-		System.out.println("Send - Server");
+		System.out.println("Uploading...");
 		while (true) {
 			mySocket = myServerSocket.accept();
 			init();
-			System.out.println("Established connection");
+			System.out.println("Incoming Connection");
 
 			String input = inFromPeer.readLine(); // getting stuck
 
@@ -129,13 +164,13 @@ class Peer {
 
 	void sendIP() {
 		try {
-			mySocket = new Socket(IP_ADDRESS, 6789);
+			mySocket = new Socket(IP_ADDRESS, PEER_PORT);
 			init();
 			outToPeer.writeBytes("I" + InetAddress.getLocalHost().getHostAddress() + "\n");
 			mySocket.close();
 		} catch (Exception e) {
-			System.out.println("Wrong IP");
-			e.printStackTrace();
+			System.out.println("Wrong IP or Peer not listening");
+//			e.printStackTrace();
 		}
 	}
 
@@ -177,47 +212,8 @@ class Peer {
 		}
 	}
 
-	String requestFileList() {
-		String fileList = "";
 
-		try {
-			outToPeer.writeBytes("L\n"); // no problem?
-			fileList = inFromPeer.readLine();
-			outToPeer.flush();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
 
-		return fileList;
-	}
-
-	void requestFile(String fileName) {
-		OutputStream out = null;
-		InputStream in = null;
-
-		try {
-			outToPeer.writeBytes("F" + fileName + "\n");
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
-		try {
-			out = new FileOutputStream(SHARED_FILE_PATH + fileName);
-		} catch (FileNotFoundException ex) {
-			System.out.println("File not found. ");
-		}
-		try {
-			in = mySocket.getInputStream();
-			byte[] bytes = new byte[100 * 1024];
-			int count;
-			while ((count = in.read(bytes)) > 0) {
-				out.write(bytes, 0, count);
-			}
-			outToPeer.flush();
-		} catch (Exception e) {
-			e.printStackTrace();
-		}
-
-	}
 
 	void terminateSync() {
 		try {
