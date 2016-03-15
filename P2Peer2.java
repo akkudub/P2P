@@ -9,6 +9,7 @@ public class P2Peer2 {
 	final static int APPLICATION_PORT = 6969;
 	final static int CONNECTION_TIMEOUT = 15000;
 	final static int KB_TIMEOUT = 15000;
+	
 	final static String SHARED_FILE_PATH = P2Peer2.class.getProtectionDomain().getCodeSource().getLocation().getPath()
 			+ "../src" + File.separator + "P2Peer2_Shared_Files" + File.separator;
 
@@ -22,6 +23,7 @@ public class P2Peer2 {
 		BufferedReader KBinput = new BufferedReader(new InputStreamReader(System.in));
 
 		while (true) {
+			//while there are no peers to connect to, wait on incoming connections
 			if (peerList.isEmpty()) {
 				System.out.println("Waiting for Incoming connections for 10 seconds");
 				try {
@@ -32,13 +34,15 @@ public class P2Peer2 {
 					newPeer.upload();
 					serverSocket.close();
 				} catch (java.io.InterruptedIOException e) {
+					//exception if waited for connections for too long
 					serverSocket.close();
 					System.out.println(
 							"No Peer found, enter the IP address of another peer in 10 sec: ");
+					// exception if no keyboard input
 					long startTime = System.currentTimeMillis();
-					while ((System.currentTimeMillis() - startTime) < KB_TIMEOUT && !KBinput.ready()) {
+					while ((System.currentTimeMillis() - startTime) < KB_TIMEOUT  && !KBinput.ready()) {
 					}
-
+					
 					if (KBinput.ready()) {
 						peerIP = KBinput.readLine();
 					    System.out.println("Connecting to: " + peerIP);
@@ -50,6 +54,7 @@ public class P2Peer2 {
 					System.out.println("Port not available, will try again");
 				}
 			} else {
+				//if there is a peer in your peer list, then sync with that peer
 				peerIP = peerList.remove(0);
 				try {
 					newPeer = new Peer(SHARED_FILE_PATH, peerIP, APPLICATION_PORT);

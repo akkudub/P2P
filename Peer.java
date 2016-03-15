@@ -5,8 +5,9 @@ import java.util.List;
 import java.util.Stack;
 
 class Peer {
-
-	private String SHARED_FILE_PATH;
+	//private variables, self explanatory
+	
+	private String SHARED_FOLDER;
 	private int PEER_PORT = 6969;
 	private Socket mySocket;
 	private ServerSocket myServerSocket;
@@ -19,29 +20,33 @@ class Peer {
 	private Stack<String> missingFiles = new Stack<String>(); 
 
 	Peer(String sharedFilePath, String IP, int port) {
-		SHARED_FILE_PATH = sharedFilePath;
+		SHARED_FOLDER = sharedFilePath;
 		IP_ADDRESS = IP;
 		PEER_PORT = port;
 	}
 	
+	//init to re initialise the output and input streams every time a new socket is created
 	void init() throws IOException{
 		inFromPeer = new BufferedReader(new InputStreamReader(mySocket.getInputStream()));
 		outToPeer = new DataOutputStream(mySocket.getOutputStream());
 	}
 	
+	//set a server socket after an incoming connection has been accepted
 	void setServerSocket(ServerSocket ss){
 		myServerSocket = ss;
 	}
 	
+	//main download function to be used when downloading files from a remote peer
 	void download() throws Exception {
 		mySocket = new Socket(IP_ADDRESS, PEER_PORT);
 		init();
-		System.out.println("Downloading");
+		System.out.println("Downloading...");
+		//get the list of files
 		String peerFiles = requestRemoteFileList();
 		mySocket.close();
-
+		//calculate the missing files
 		remotePeerFiles = convertToList(peerFiles);
-		localPeerFiles = getMyFiles();
+		localPeerFiles = getLocalFiles();
 		missingFiles = calculateMissingFiles(localPeerFiles, remotePeerFiles);
 
 		while (true) {
@@ -49,19 +54,20 @@ class Peer {
 				String fetchFile = missingFiles.pop();
 				mySocket = new Socket(IP_ADDRESS, PEER_PORT);
 				init();
-				requestFile(fetchFile);
+				requestRemoteFile(fetchFile);
 				mySocket.close();
 			} else {
 				mySocket = new Socket(IP_ADDRESS, PEER_PORT);
 				init();
-				terminateSync();
+				endSync();
 				mySocket.close();
 				break;
 			}
 		}
 	}
 	
-	String requestRemoteFileList() {
+	//helper function to handle the sending of the application layer protocol of requesting for file list
+	private String requestRemoteFileList() {
 		String fileList = "";
 		try {
 			outToPeer.writeBytes("L\n"); // no problem?
@@ -74,10 +80,10 @@ class Peer {
 		return fileList;
 	}
 	
-
-	void requestFile(String fileName) {
-		OutputStream out = null;
-		InputStream in = null;
+	//helper function to handle the request for one remote file
+	private void requestRemoteFile(String fileName) {
+		OutputStream output = null;
+		InputStream input = null;
 
 		try {
 			outToPeer.writeBytes("F" + fileName + "\n");
@@ -85,16 +91,16 @@ class Peer {
 			e.printStackTrace();
 		}
 		try {
-			out = new FileOutputStream(SHARED_FILE_PATH + fileName);
+			output = new FileOutputStream(SHARED_FOLDER + fileName);
 		} catch (FileNotFoundException ex) {
 			System.out.println("File not found. ");
 		}
 		try {
-			in = mySocket.getInputStream();
+			input = mySocket.getInputStream();
 			byte[] bytes = new byte[100 * 1024];
 			int count;
-			while ((count = in.read(bytes)) > 0) {
-				out.write(bytes, 0, count);
+			while ((count = input.read(bytes)) > 0) {
+				output.write(bytes, 0, count);
 			}
 			outToPeer.flush();
 		} catch (Exception e) {
@@ -103,7 +109,8 @@ class Peer {
 
 	}
 	
-	static List<String> convertToList(String filenames) {
+	//convert the string of filenames to an array list so it can be compared
+	private static List<String> convertToList(String filenames) {
 		List<String> list = new ArrayList<String>();
 		String fileNames[] = filenames.split(",");
 		for (int i = 0; i < fileNames.length; i++) {
@@ -111,10 +118,11 @@ class Peer {
 		}
 		return list;
 	}
-
-	List<String> getMyFiles() {
+	
+	//get the filenames in the local shared folder
+	private List<String> getLocalFiles() {
 		List<String> allFilesList = new ArrayList<String>();
-		File dir = new File(SHARED_FILE_PATH);
+		File dir = new File(SHARED_FOLDER);
 		if (dir.exists()) {
 			for (final File fileEntry : dir.listFiles()) {
 				allFilesList.add(fileEntry.getName());
@@ -123,7 +131,8 @@ class Peer {
 		return allFilesList;
 	}
 	
-	static Stack<String> calculateMissingFiles(List<String> myFilesList, List<String> peerFileList) {
+	//calculate the missing files for the local peer
+	private static Stack<String> calculateMissingFiles(List<String> myFilesList, List<String> peerFileList) {
 		peerFileList.removeAll(myFilesList);
 		Stack<String> missingFiles = new Stack<String>();
 		for (int i = 0; i < peerFileList.size(); i++) {
@@ -132,6 +141,7 @@ class Peer {
 		return missingFiles;
 	}
 	
+	// main upload handler for a peer
 	void upload() throws IOException {
 		System.out.println("Uploading...");
 		while (true) {
@@ -142,18 +152,19 @@ class Peer {
 			String input = inFromPeer.readLine(); // getting stuck
 
 			System.out.println(input);// here again
-
+			
+			//handle all the protocol messages
 			if (input.charAt(0) == 'I') {
 				remotePeerList.add(input.substring(1));
 			} else if (input.equals("L")) {
-				sendFileList();
+				sendLocalFileList();
 				mySocket.close();
 			} else if (input.charAt(0) == 'F') {
 				String fileName = input.substring(1);
-				sendFile(fileName);
+				sendLocalFile(fileName);
 				mySocket.close();
 			} else if (input.equals("D")) {
-				System.out.println("Terminated sync.");
+				System.out.println("Ending sync.");
 				mySocket.close();
 				break;
 			}			
@@ -161,7 +172,7 @@ class Peer {
 
 	}
 
-
+	// send your own IP address
 	void sendIP() {
 		try {
 			mySocket = new Socket(IP_ADDRESS, PEER_PORT);
@@ -173,10 +184,11 @@ class Peer {
 //			e.printStackTrace();
 		}
 	}
+	
+	//helper function to handle the sending of the application layer protocol of sending local file list
+	private void sendLocalFileList() {
 
-	void sendFileList() {
-
-		File dir = new File(SHARED_FILE_PATH);
+		File dir = new File(SHARED_FOLDER);
 		StringBuffer allFileNames = new StringBuffer();
 		if (dir.exists()) {
 			for (final File fileEntry : dir.listFiles()) {
@@ -192,19 +204,19 @@ class Peer {
 		}
 
 	}
-
-	void sendFile(String fileName) {
-		InputStream in = null;
-		OutputStream out = null;
-		File file = new File(SHARED_FILE_PATH + fileName);
+	//helper function to handle the sending of a local file
+	private void sendLocalFile(String fileName) {
+		InputStream input = null;
+		OutputStream output = null;
+		File file = new File(SHARED_FOLDER + fileName);
 		// Get the size of the file
 		byte[] bytes = new byte[16 * 1024];
 		int count;
 		try {
-			in = new FileInputStream(file);
-			out = mySocket.getOutputStream();
-			while ((count = in.read(bytes)) > 0) {
-				out.write(bytes, 0, count);
+			input = new FileInputStream(file);
+			output = mySocket.getOutputStream();
+			while ((count = input.read(bytes)) > 0) {
+				output.write(bytes, 0, count);
 			}
 			outToPeer.flush();
 		} catch (Exception e) {
@@ -212,10 +224,8 @@ class Peer {
 		}
 	}
 
-
-
-
-	void terminateSync() {
+	//handle the application layer protocol of sending the message to end the sync
+	private void endSync() {
 		try {
 			outToPeer.writeBytes("D\n");
 		} catch (IOException e) {
